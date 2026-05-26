@@ -33,13 +33,31 @@ app.use("/api/fixtures", fixturesRoutes);
 app.use("/api/rankings", rankingsRoutes);
 
 // Root Endpoint for Health Check
-app.get("/", (req, res) => {
+async function respondHealth(req, res) {
+  // If a connection attempt is in progress, wait for it (short timeout)
+  if (connectPromise) {
+    try {
+      // wait but don't block indefinitely
+      await Promise.race([
+        connectPromise,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("timeout")), 3000),
+        ),
+      ]);
+    } catch (err) {
+      // ignore - we'll report disconnected state below
+    }
+  }
+
   res.json({
     message: "Backend de Apuestas Mundial 2026 corriendo con éxito 🚀",
     dbStatus:
       mongoose.connection.readyState === 1 ? "Conectado" : "Desconectado",
   });
-});
+}
+
+app.get("/", respondHealth);
+app.get("/api", respondHealth);
 
 // Seed default Admin Account on startup
 async function seedAdmin() {
@@ -71,12 +89,13 @@ async function seedAdmin() {
 }
 
 // Database Connection (connect only once)
+let connectPromise = null;
 if (mongoose.connection.readyState === 0) {
   const MONGO_URI =
     process.env.MONGO_URI || "mongodb://localhost:27017/prode_mundial";
   console.log("Intentando conectar a MongoDB...");
 
-  mongoose
+  connectPromise = mongoose
     .connect(MONGO_URI)
     .then(() => {
       console.log("¡Conexión exitosa a MongoDB!");

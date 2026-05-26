@@ -10,7 +10,6 @@ import {
   RefreshCw,
   HelpCircle,
   AlertCircle,
-  Eye,
   Star,
   Award,
   ShieldAlert,

@@ -8,14 +8,41 @@ const { User } = require("../models");
 // Initialize Express App
 const app = express();
 
-// Standard Middlewares
-app.use(
-  cors({
-    origin: "*",
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  }),
-);
+// Configuración CORS mejorada para Vercel
+const corsOptions = {
+  origin: [
+    "https://mundial-2026-w4kp.vercel.app",
+    "https://mundial-2026-pi.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://localhost:5000",
+  ],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  credentials: true,
+  optionsSuccessStatus: 200,
+};
+
+// Aplica CORS antes que cualquier otra cosa
+app.use(cors(corsOptions));
+
+// Middleware adicional para manejar preflight requests manualmente
+app.use((req, res, next) => {
+  // También permitir desde cualquier origen para debug
+  res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
+  res.header("Access-Control-Allow-Credentials", "true");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization",
+  );
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  next();
+});
+
 app.use(express.json());
 
 // Import Routes
@@ -34,10 +61,8 @@ app.use("/api/rankings", rankingsRoutes);
 
 // Root Endpoint for Health Check
 async function respondHealth(req, res) {
-  // If a connection attempt is in progress, wait for it (short timeout)
   if (connectPromise) {
     try {
-      // wait but don't block indefinitely
       await Promise.race([
         connectPromise,
         new Promise((_, reject) =>
@@ -45,7 +70,7 @@ async function respondHealth(req, res) {
         ),
       ]);
     } catch (err) {
-      // ignore - we'll report disconnected state below
+      // ignore
     }
   }
 
@@ -59,7 +84,7 @@ async function respondHealth(req, res) {
 app.get("/", respondHealth);
 app.get("/api", respondHealth);
 
-// Seed default Admin Account on startup
+// Seed default Admin Account
 async function seedAdmin() {
   try {
     const adminUser = process.env.ADMIN_USERNAME || "admin";
@@ -88,13 +113,12 @@ async function seedAdmin() {
   }
 }
 
-// Database Connection (connect only once)
+// Database Connection
 let connectPromise = null;
 if (mongoose.connection.readyState === 0) {
   const MONGO_URI =
     process.env.MONGO_URI || "mongodb://localhost:27017/prode_mundial";
 
-  // Log connection attempt (mask credentials)
   const maskedUri = MONGO_URI.replace(
     /mongodb\+srv:\/\/.*@/,
     "mongodb+srv://***:***@",
@@ -132,5 +156,4 @@ module.exports = (req, res) => {
   return app(req, res);
 };
 
-// Also export app for local development
 module.exports.app = app;

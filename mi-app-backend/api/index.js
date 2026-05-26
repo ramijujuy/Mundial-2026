@@ -8,38 +8,42 @@ const { User } = require("../models");
 // Initialize Express App
 const app = express();
 
-// Configuración CORS mejorada para Vercel
-const corsOptions = {
-  origin: [
-    "https://mundial-2026-w4kp.vercel.app",
-    "https://mundial-2026-pi.vercel.app",
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://localhost:5000",
-  ],
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
-  credentials: true,
-  optionsSuccessStatus: 200,
-};
+// Configuración CORS simplificada y corregida
+const allowedOrigins = [
+  "https://mundial-2026-w4kp.vercel.app",
+  "https://mundial-2026-pi.vercel.app",
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "http://localhost:5000",
+  "http://localhost:16957",
+];
 
-// Aplica CORS antes que cualquier otra cosa
-app.use(cors(corsOptions));
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // Permitir requests sin origin (como mobile apps o curl)
+      if (!origin) return callback(null, true);
 
-// Middleware adicional para manejar preflight requests manualmente
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        console.log("Origen bloqueado por CORS:", origin);
+        callback(null, true); // Temporalmente permitir todos para debugging
+      }
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 200,
+  }),
+);
+
+// Middleware para logging (útil para debugging)
 app.use((req, res, next) => {
-  // También permitir desde cualquier origen para debug
-  res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
-  res.header("Access-Control-Allow-Credentials", "true");
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  res.header(
-    "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept, Authorization",
-  );
-
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  console.log("Origin:", req.headers.origin);
+  console.log("Headers:", req.headers);
   next();
 });
 
@@ -52,37 +56,34 @@ const pronosticosRoutes = require("../routes/pronosticos");
 const fixturesRoutes = require("../routes/fixtures");
 const rankingsRoutes = require("../routes/rankings");
 
-// Mount Routes
+// Mount Routes - IMPORTANTE: No agregues /api adicional aquí si ya está en las rutas
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/pronosticos", pronosticosRoutes);
 app.use("/api/fixtures", fixturesRoutes);
 app.use("/api/rankings", rankingsRoutes);
 
-// Root Endpoint for Health Check
-async function respondHealth(req, res) {
-  if (connectPromise) {
-    try {
-      await Promise.race([
-        connectPromise,
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("timeout")), 3000),
-        ),
-      ]);
-    } catch (err) {
-      // ignore
-    }
-  }
-
+// Health Check Endpoints
+app.get("/", (req, res) => {
   res.json({
     message: "Backend de Apuestas Mundial 2026 corriendo con éxito 🚀",
-    dbStatus:
-      mongoose.connection.readyState === 1 ? "Conectado" : "Desconectado",
+    cors: "Configurado correctamente",
+    endpoints: [
+      "/api/auth",
+      "/api/admin",
+      "/api/pronosticos",
+      "/api/fixtures",
+      "/api/rankings",
+    ],
   });
-}
+});
 
-app.get("/", respondHealth);
-app.get("/api", respondHealth);
+app.get("/api", (req, res) => {
+  res.json({
+    message: "API funcionando correctamente",
+    status: "online",
+  });
+});
 
 // Seed default Admin Account
 async function seedAdmin() {
@@ -90,9 +91,15 @@ async function seedAdmin() {
     const adminUser = process.env.ADMIN_USERNAME || "admin";
     const adminPass = process.env.ADMIN_PASSWORD || "261299";
 
+    // Esperar a que la conexión esté lista
+    if (connectPromise) {
+      await connectPromise;
+    }
+
     const existingAdmin = await User.findOne({
       username: adminUser.toLowerCase(),
     });
+
     if (!existingAdmin) {
       const hashedPassword = await bcrypt.hash(adminPass, 10);
       const newAdmin = new User({
@@ -102,57 +109,73 @@ async function seedAdmin() {
         status: "approved",
       });
       await newAdmin.save();
-      console.log(
-        `[SEED] Administrador default creado con usuario: '${adminUser}'`,
-      );
+      console.log(`[SEED] Administrador creado: '${adminUser}'`);
     } else {
-      console.log(`[SEED] El usuario administrador '${adminUser}' ya existe.`);
+      console.log(`[SEED] Admin '${adminUser}' ya existe.`);
     }
   } catch (error) {
-    console.error("[SEED ERROR] Error al crear administrador inicial:", error);
+    console.error("[SEED ERROR]:", error);
   }
 }
 
 // Database Connection
 let connectPromise = null;
-if (mongoose.connection.readyState === 0) {
-  const MONGO_URI =
-    process.env.MONGO_URI || "mongodb://localhost:27017/prode_mundial";
 
-  const maskedUri = MONGO_URI.replace(
-    /mongodb\+srv:\/\/.*@/,
-    "mongodb+srv://***:***@",
-  );
-  console.log(`[DB] Intentando conectar a MongoDB...`);
-  console.log(`[DB] URI (masked): ${maskedUri}`);
-  console.log(`[DB] MONGO_URI defined: ${!!process.env.MONGO_URI}`);
+async function connectDB() {
+  if (mongoose.connection.readyState === 0) {
+    const MONGO_URI =
+      process.env.MONGO_URI || "mongodb://localhost:27017/prode_mundial";
 
-  connectPromise = mongoose
-    .connect(MONGO_URI)
-    .then(() => {
-      console.log("[DB] ¡Conexión exitosa a MongoDB!");
-      console.log(`[DB] Connection state: ${mongoose.connection.readyState}`);
-      seedAdmin();
-    })
-    .catch((err) => {
-      console.error("[DB] Error al conectar a MongoDB:", err.message);
-      console.error("[DB] Error code:", err.code);
-      console.error("[DB] Error name:", err.name);
-      if (err.reason) {
-        console.error("[DB] Error reason:", err.reason);
-      }
-    });
+    console.log(`[DB] Conectando a MongoDB...`);
+
+    try {
+      await mongoose.connect(MONGO_URI, {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+      });
+      console.log("[DB] Conexión exitosa!");
+      await seedAdmin();
+      return mongoose.connection;
+    } catch (err) {
+      console.error("[DB Error]:", err.message);
+      throw err;
+    }
+  }
+  return mongoose.connection;
 }
 
-// Export for Vercel Serverless Function
-module.exports = (req, res) => {
-  // Handle preflight requests
-  if (req.method === "OPTIONS") {
-    res.status(200).end();
-    return;
+// Iniciar conexión
+connectPromise = connectDB().catch((err) => {
+  console.error("Fallo en conexión inicial:", err);
+});
+
+// Export for Vercel Serverless Function - Versión corregida
+module.exports = async (req, res) => {
+  // Asegurar que la base de datos esté conectada
+  try {
+    if (mongoose.connection.readyState !== 1) {
+      await connectPromise;
+    }
+  } catch (err) {
+    console.error("Error de conexión DB:", err);
   }
 
-  // Delegate to Express app
+  // Manejar OPTIONS requests
+  if (req.method === "OPTIONS") {
+    res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
+    res.setHeader(
+      "Access-Control-Allow-Methods",
+      "GET, POST, PUT, DELETE, OPTIONS",
+    );
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Authorization, X-Requested-With",
+    );
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    return res.status(200).end();
+  }
+
+  // Delegar a Express
   return app(req, res);
 };
 

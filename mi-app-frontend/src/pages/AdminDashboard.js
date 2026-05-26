@@ -161,6 +161,34 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleDownloadForecasts = async (campId) => {
+    try {
+      const response = await axios.get(
+        `/api/admin/export-forecasts?championshipId=${campId}`,
+        {
+          responseType: "blob",
+        },
+      );
+      const blob = new Blob([response.data], {
+        type: "application/vnd.ms-excel",
+      });
+      const url = window.URL.createObjectURL(blob);
+      const contentDisposition = response.headers["content-disposition"] || "";
+      const matches = contentDisposition.match(/filename="(.+)"/);
+      const filename = matches ? matches[1] : "pronosticos.xlsx";
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      showMsg("success", "Pronósticos descargados correctamente.");
+    } catch (err) {
+      showMsg("error", "Error al descargar pronósticos.");
+    }
+  };
+
   useEffect(() => {
     if (activeTab === "users") {
       fetchUsers();
@@ -1595,7 +1623,8 @@ export default function AdminDashboard() {
                   marginTop: "4px",
                 }}
               >
-                Selecciona un campeonato para ver la clasificación y eliminarlo si es necesario.
+                Selecciona un campeonato para ver la clasificación y eliminarlo
+                si es necesario.
               </p>
             </div>
 
@@ -1653,7 +1682,8 @@ export default function AdminDashboard() {
                 padding: "40px",
               }}
             >
-              No hay jugadores registrados o aún no hay puntajes calculados para este campeonato.
+              No hay jugadores registrados o aún no hay puntajes calculados para
+              este campeonato.
             </p>
           ) : (
             <>
@@ -1669,7 +1699,10 @@ export default function AdminDashboard() {
               >
                 <div>
                   <span
-                    style={{ fontSize: "0.9rem", color: "var(--text-secondary)" }}
+                    style={{
+                      fontSize: "0.9rem",
+                      color: "var(--text-secondary)",
+                    }}
                   >
                     Campeonato seleccionado:
                   </span>
@@ -1677,13 +1710,26 @@ export default function AdminDashboard() {
                     {rankingSummary?.name}
                   </span>
                 </div>
-                <button
-                  onClick={() => handleDeleteChampionship(rankingChampionshipId)}
-                  className="btn-danger"
-                  style={{ padding: "10px 16px", fontSize: "0.85rem" }}
-                >
-                  Eliminar Campeonato
-                </button>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    onClick={() =>
+                      handleDownloadForecasts(rankingChampionshipId)
+                    }
+                    className="btn-secondary"
+                    style={{ padding: "10px 16px", fontSize: "0.85rem" }}
+                  >
+                    Descargar Pronósticos (Excel)
+                  </button>
+                  <button
+                    onClick={() =>
+                      handleDeleteChampionship(rankingChampionshipId)
+                    }
+                    className="btn-danger"
+                    style={{ padding: "10px 16px", fontSize: "0.85rem" }}
+                  >
+                    Eliminar Campeonato
+                  </button>
+                </div>
               </div>
 
               <div style={{ overflowX: "auto" }}>

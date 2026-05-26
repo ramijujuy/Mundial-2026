@@ -500,4 +500,120 @@ router.post(
   },
 );
 
+// GET /api/admin/export-forecasts - Export all forecasts for a championship as Excel
+router.get(
+  "/export-forecasts",
+  authenticateJWT,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { championshipId } = req.query;
+      if (!championshipId) {
+        return res
+          .status(400)
+          .json({ message: "Championship ID es requerido" });
+      }
+
+      const championship = await Championship.findById(championshipId);
+      if (!championship) {
+        return res.status(404).json({ message: "Campeonato no encontrado" });
+      }
+
+      // Fetch all matches for this championship
+      const matches = await Match.find({ championshipId }).sort({
+        date: 1,
+        time: 1,
+      });
+      const matchMap = new Map();
+      matches.forEach((m) => {
+        matchMap.set(m._id.toString(), m);
+      });
+
+      // Fetch all forecasts with user details
+      const forecasts = await Forecast.find({ championshipId }).populate(
+        "userId",
+        "username",
+      );
+
+      // Build Excel rows: columns = [Usuario, Confirmado, Puntos, ...Match columns]
+      const rows = [];
+
+      // Header row
+      const headerRow = ["Usuario", "Estado", "Confirmado", "Puntos"];
+      matches.forEach((m) => {
+        headerRow.push(
+          `${m.localTeam} vs ${m.visitorTeam} (${m.date} ${m.time})`,
+        );
+        headerRow.push("Resultado Real");
+      });
+      rows.push(headerRow);
+
+      // Data rows
+      forecasts.forEach((forecast) => {
+        const userRow = [
+          forecast.userId.username,
+          forecast.isConfirmed ? "Confirmado" : "Borrador",
+          forecast.isConfirmed ? "Sí" : "No",
+          forecast.pointsObtained || 0,
+        ];
+
+        // For each match, add user prediction and real result
+        matches.forEach((match) => {
+          const prediction = forecast.matches.find(
+            (p) => p.matchId.toString() === match._id.toString(),
+          );
+          const predictionLabel = prediction
+            ? prediction.selection === "L"
+              ? "Local"
+              : prediction.selection === "E"
+                ? "Empate"
+                : "Visitante"
+            : "N/A";
+          userRow.push(predictionLabel);
+
+          const realResultLabel = match.realResult
+            ? match.realResult === "L"
+              ? "Local"
+              : match.realResult === "E"
+                ? "Empate"
+                : "Visitante"
+            : "No definido";
+          userRow.push(realResultLabel);
+        });
+
+        rows.push(userRow);
+      });
+
+      // Create workbook and worksheet
+      const ws = xlsx.utils.aoa_to_sheet(rows);
+      const wb = xlsx.utils.book_new();
+      xlsx.utils.book_append_sheet(wb, ws, "Pronósticos");
+
+      // Set column widths
+      const colWidths = [];
+      headerRow.forEach((col, idx) => {
+        colWidths.push({ wch: Math.max(15, col.length + 2) });
+      });
+      ws["!cols"] = colWidths;
+
+      // Generate Excel buffer
+      const excelBuffer = xlsx.write(wb, { bookType: "xlsx", type: "buffer" });
+
+      // Send as file
+      const filename = `pronosticos_${championship.name
+        .replace(/\s+/g, "_")
+        .toLowerCase()}.xlsx`;
+      res.setHeader("Content-Type", "application/vnd.ms-excel");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`,
+      );
+      res.send(excelBuffer);
+    } catch (error) {
+      console.error("Error exporting forecasts:", error);
+      res.status(500).json({ message: "Error al exportar pronósticos" });
+    }
+  },
+);
+
 module.exports = router;

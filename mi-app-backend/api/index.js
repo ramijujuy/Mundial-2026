@@ -1,11 +1,45 @@
 require("dotenv").config();
+const express = require("express");
 const mongoose = require("mongoose");
+const cors = require("cors");
 const bcrypt = require("bcryptjs");
-const { User } = require("./models");
+const { User } = require("../models");
 
-// Import the serverless handler
-const handler = require("./api/index.js");
-const { app } = handler;
+// Initialize Express App
+const app = express();
+
+// Standard Middlewares
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
+app.use(express.json());
+
+// Import Routes
+const authRoutes = require("../routes/auth");
+const adminRoutes = require("../routes/admin");
+const pronosticosRoutes = require("../routes/pronosticos");
+const fixturesRoutes = require("../routes/fixtures");
+const rankingsRoutes = require("../routes/rankings");
+
+// Mount Routes
+app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/pronosticos", pronosticosRoutes);
+app.use("/api/fixtures", fixturesRoutes);
+app.use("/api/rankings", rankingsRoutes);
+
+// Root Endpoint for Health Check
+app.get("/", (req, res) => {
+  res.json({
+    message: "Backend de Apuestas Mundial 2026 corriendo con éxito 🚀",
+    dbStatus:
+      mongoose.connection.readyState === 1 ? "Conectado" : "Desconectado",
+  });
+});
 
 // Seed default Admin Account on startup
 async function seedAdmin() {
@@ -36,7 +70,7 @@ async function seedAdmin() {
   }
 }
 
-// Database Connection
+// Database Connection (connect only once)
 if (mongoose.connection.readyState === 0) {
   const MONGO_URI =
     process.env.MONGO_URI || "mongodb://localhost:27017/prode_mundial";
@@ -53,14 +87,17 @@ if (mongoose.connection.readyState === 0) {
     });
 }
 
-// Listen on PORT for local development
-if (process.env.NODE_ENV !== "production" && require.main === module) {
-  const PORT = process.env.PORT || 5000;
-  app.listen(PORT, () => {
-    console.log(`Servidor local corriendo en el puerto ${PORT}`);
-  });
-}
+// Export for Vercel Serverless Function
+module.exports = (req, res) => {
+  // Handle preflight requests
+  if (req.method === "OPTIONS") {
+    res.status(200).end();
+    return;
+  }
 
-// Export handler for Vercel serverless
-module.exports = handler;
+  // Delegate to Express app
+  return app(req, res);
+};
+
+// Also export app for local development
 module.exports.app = app;

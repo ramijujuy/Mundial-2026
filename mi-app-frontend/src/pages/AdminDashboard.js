@@ -1560,6 +1560,8 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
+        </div>
+      )}
 
       {activeTab === "rankings" && (
         <div className="glass-panel-static" style={{ padding: "32px" }}>

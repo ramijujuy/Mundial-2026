@@ -93,16 +93,27 @@ let connectPromise = null;
 if (mongoose.connection.readyState === 0) {
   const MONGO_URI =
     process.env.MONGO_URI || "mongodb://localhost:27017/prode_mundial";
-  console.log("Intentando conectar a MongoDB...");
+  
+  // Log connection attempt (mask credentials)
+  const maskedUri = MONGO_URI.replace(/mongodb\+srv:\/\/.*@/, "mongodb+srv://***:***@");
+  console.log(`[DB] Intentando conectar a MongoDB...`);
+  console.log(`[DB] URI (masked): ${maskedUri}`);
+  console.log(`[DB] MONGO_URI defined: ${!!process.env.MONGO_URI}`);
 
   connectPromise = mongoose
     .connect(MONGO_URI)
     .then(() => {
-      console.log("¡Conexión exitosa a MongoDB!");
+      console.log("[DB] ¡Conexión exitosa a MongoDB!");
+      console.log(`[DB] Connection state: ${mongoose.connection.readyState}`);
       seedAdmin();
     })
     .catch((err) => {
-      console.error("Error al conectar a MongoDB:", err.message);
+      console.error("[DB] Error al conectar a MongoDB:", err.message);
+      console.error("[DB] Error code:", err.code);
+      console.error("[DB] Error name:", err.name);
+      if (err.reason) {
+        console.error("[DB] Error reason:", err.reason);
+      }
     });
 }
 

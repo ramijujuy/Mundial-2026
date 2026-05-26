@@ -360,6 +360,9 @@ async function recalculateScores(championshipId) {
 
   // Fetch all forecasts for this championship
   const forecasts = await Forecast.find({ championshipId });
+  console.log(
+    `[recalculateScores] Championship: ${championshipId}, Matches: ${matches.length}, Forecasts: ${forecasts.length}`,
+  );
 
   for (const forecast of forecasts) {
     let score = 0;
@@ -375,6 +378,9 @@ async function recalculateScores(championshipId) {
 
     forecast.pointsObtained = score;
     await forecast.save();
+    console.log(
+      `[recalculateScores] User ${forecast.userId} score updated to ${score}`,
+    );
   }
 }
 
@@ -386,6 +392,10 @@ router.post(
   async (req, res) => {
     try {
       const { championshipId, results } = req.body;
+      console.log(
+        `[upload-results] Received: championshipId=${championshipId}, results count=${results?.length}`,
+      );
+
       // results is expected to be an array of: { matchId, scoreLocal, scoreVisitor }
 
       if (!championshipId || !results || !Array.isArray(results)) {
@@ -416,6 +426,7 @@ router.post(
           scoreVisitor === null ||
           scoreVisitor === undefined
         ) {
+          console.log(`[upload-results] Skipping match ${matchId} (no score)`);
           continue; // Skip if score is not provided
         }
 
@@ -427,6 +438,9 @@ router.post(
           realResult = "L"; // Local wins
         else if (numVisitor > numLocal) realResult = "V"; // Visitor wins
 
+        console.log(
+          `[upload-results] Match ${matchId}: ${numLocal}-${numVisitor} => ${realResult}`,
+        );
         await Match.findByIdAndUpdate(matchId, {
           scoreLocal: numLocal,
           scoreVisitor: numVisitor,
@@ -435,6 +449,9 @@ router.post(
       }
 
       // Recalculate standings for all users
+      console.log(
+        `[upload-results] Starting recalculateScores for championship ${championshipId}`,
+      );
       await recalculateScores(championshipId);
 
       res.json({
@@ -535,16 +552,15 @@ router.get(
         "username",
       );
 
-      // Build Excel rows: columns = [Usuario, Confirmado, Puntos, ...Match columns]
+      // Build Excel rows: columns = [Usuario, Estado, Confirmado, Puntos, ...Match predictions/results]
       const rows = [];
 
       // Header row
       const headerRow = ["Usuario", "Estado", "Confirmado", "Puntos"];
-      matches.forEach((m) => {
-        headerRow.push(
-          `${m.localTeam} vs ${m.visitorTeam} (${m.date} ${m.time})`,
-        );
-        headerRow.push("Resultado Real");
+      matches.forEach((m, idx) => {
+        // Just team names, no date/time
+        headerRow.push(`${idx + 1}. ${m.localTeam} vs ${m.visitorTeam}`);
+        headerRow.push("Resultado");
       });
       rows.push(headerRow);
 
@@ -577,7 +593,7 @@ router.get(
               : match.realResult === "E"
                 ? "Empate"
                 : "Visitante"
-            : "No definido";
+            : "-";
           userRow.push(realResultLabel);
         });
 

@@ -114,6 +114,53 @@ router.post(
   },
 );
 
+// DELETE /api/admin/user/:userId - Delete a user and their forecasts
+router.delete(
+  "/user/:userId",
+  authenticateJWT,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ message: "Usuario no encontrado" });
+      }
+      await Forecast.deleteMany({ userId: user._id });
+      await User.findByIdAndDelete(user._id);
+      res.json({ message: `Usuario ${user.username} eliminado correctamente` });
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      res.status(500).json({ message: "Error al eliminar usuario" });
+    }
+  },
+);
+
+// DELETE /api/admin/championship/:championshipId - Delete a championship and related data
+router.delete(
+  "/championship/:championshipId",
+  authenticateJWT,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { championshipId } = req.params;
+      const championship = await Championship.findById(championshipId);
+      if (!championship) {
+        return res.status(404).json({ message: "Campeonato no encontrado" });
+      }
+      await Match.deleteMany({ championshipId: championship._id });
+      await Forecast.deleteMany({ championshipId: championship._id });
+      await Championship.findByIdAndDelete(championship._id);
+      res.json({
+        message: `Campeonato ${championship.name} eliminado correctamente`,
+      });
+    } catch (error) {
+      console.error("Error deleting championship:", error);
+      res.status(500).json({ message: "Error al eliminar campeonato" });
+    }
+  },
+);
+
 // GET /api/admin/export-participants - Export participant list as CSV
 router.get(
   "/export-participants",

@@ -36,6 +36,12 @@ export default function AdminDashboard() {
   const [resultsLoading, setResultsLoading] = useState(false);
   const [exportChampionshipId, setExportChampionshipId] = useState("");
 
+  // Admin ranking & championship management
+  const [rankings, setRankings] = useState([]);
+  const [rankingLoading, setRankingLoading] = useState(false);
+  const [rankingChampionshipId, setRankingChampionshipId] = useState("");
+  const [rankingSummary, setRankingSummary] = useState(null);
+
   // General alert messages
   const [message, setMessage] = useState({ type: "", text: "" });
 
@@ -60,10 +66,14 @@ export default function AdminDashboard() {
     try {
       const res = await axios.get("/api/fixtures/championships/list");
       setChampionships(res.data);
-      if (res.data.length > 0 && !selectedCampId) {
-        // Set first active championship by default if available
+      if (res.data.length > 0) {
         const active = res.data.find((c) => c.isActive) || res.data[0];
-        setSelectedCampId(active._id);
+        if (!selectedCampId) {
+          setSelectedCampId(active._id);
+        }
+        if (!rankingChampionshipId) {
+          setRankingChampionshipId(active._id);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -94,11 +104,70 @@ export default function AdminDashboard() {
     }
   };
 
+  const fetchRankings = async (campId) => {
+    if (!campId) return;
+    setRankingLoading(true);
+    try {
+      const res = await axios.get(`/api/rankings/${campId}`);
+      setRankings(res.data.rankings || []);
+      setRankingSummary(res.data.championship || null);
+    } catch (err) {
+      showMsg("error", "Error al cargar la tabla de posiciones.");
+      setRankings([]);
+      setRankingSummary(null);
+    } finally {
+      setRankingLoading(false);
+    }
+  };
+
+  const handleDeleteUser = async (userId) => {
+    if (!window.confirm("¿Eliminar este usuario permanentemente?")) return;
+    try {
+      const res = await axios.delete(`/api/admin/user/${userId}`);
+      showMsg("success", res.data.message);
+      fetchUsers();
+    } catch (err) {
+      showMsg(
+        "error",
+        err.response?.data?.message || "Error al eliminar usuario.",
+      );
+    }
+  };
+
+  const handleDeleteChampionship = async (campId) => {
+    if (
+      !window.confirm(
+        "¿Eliminar este campeonato y todos sus datos asociados? Esta acción no se puede deshacer.",
+      )
+    )
+      return;
+    try {
+      const res = await axios.delete(`/api/admin/championship/${campId}`);
+      showMsg("success", res.data.message);
+      fetchChampionships();
+      if (rankingChampionshipId === campId) {
+        setRankingChampionshipId("");
+        setRankings([]);
+        setRankingSummary(null);
+      }
+      if (selectedCampId === campId) {
+        setSelectedCampId("");
+      }
+    } catch (err) {
+      showMsg(
+        "error",
+        err.response?.data?.message || "Error al eliminar campeonato.",
+      );
+    }
+  };
+
   useEffect(() => {
     if (activeTab === "users") {
       fetchUsers();
     } else if (activeTab === "results") {
       fetchChampionships();
+    } else if (activeTab === "rankings") {
+      if (rankingChampionshipId) fetchRankings(rankingChampionshipId);
     }
   }, [activeTab]);
 
@@ -117,6 +186,12 @@ export default function AdminDashboard() {
       fetchMatchesForAdmin(selectedCampId);
     }
   }, [selectedCampId]);
+
+  useEffect(() => {
+    if (rankingChampionshipId && activeTab === "rankings") {
+      fetchRankings(rankingChampionshipId);
+    }
+  }, [rankingChampionshipId, activeTab]);
 
   const showMsg = (type, text) => {
     setMessage({ type, text });
@@ -489,6 +564,34 @@ export default function AdminDashboard() {
           <Save size={18} />
           Cargar Resultados Oficiales
         </button>
+
+        <button
+          onClick={() => setActiveTab("rankings")}
+          style={{
+            background: "transparent",
+            border: "none",
+            borderBottom:
+              activeTab === "rankings"
+                ? "3px solid var(--accent-teal)"
+                : "3px solid transparent",
+            color:
+              activeTab === "rankings"
+                ? "var(--text-primary)"
+                : "var(--text-secondary)",
+            padding: "12px 6px",
+            fontSize: "1rem",
+            fontWeight: 600,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            transition: "all 0.2s ease",
+            whiteSpace: "nowrap",
+          }}
+        >
+          <Trophy size={18} />
+          Tabla de Posiciones
+        </button>
       </div>
 
       {/* Tab Contents: 1. User Approvals */}
@@ -672,6 +775,19 @@ export default function AdminDashboard() {
                       >
                         <Settings size={14} /> Hacer Admin
                       </button>
+                      <button
+                        onClick={() => handleDeleteUser(user._id)}
+                        className="btn-danger"
+                        style={{
+                          padding: "8px 16px",
+                          borderRadius: "8px",
+                          fontSize: "0.85rem",
+                          gap: "4px",
+                          background: "#ef4444",
+                        }}
+                      >
+                        Eliminar
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -761,6 +877,18 @@ export default function AdminDashboard() {
                               >
                                 Hacer Admin
                               </button>
+                              <button
+                                onClick={() => handleDeleteUser(user._id)}
+                                className="btn-danger"
+                                style={{
+                                  padding: "6px 12px",
+                                  fontSize: "0.75rem",
+                                  borderRadius: "6px",
+                                  background: "#ef4444",
+                                }}
+                              >
+                                Eliminar
+                              </button>
                             </div>
                           ) : (
                             <div
@@ -793,6 +921,18 @@ export default function AdminDashboard() {
                                 }}
                               >
                                 Hacer Admin
+                              </button>
+                              <button
+                                onClick={() => handleDeleteUser(user._id)}
+                                className="btn-danger"
+                                style={{
+                                  padding: "6px 12px",
+                                  fontSize: "0.75rem",
+                                  borderRadius: "6px",
+                                  background: "#ef4444",
+                                }}
+                              >
+                                Eliminar
                               </button>
                             </div>
                           )}
@@ -1419,6 +1559,156 @@ export default function AdminDashboard() {
                 </button>
               </div>
             </div>
+          )}
+
+      {activeTab === "rankings" && (
+        <div className="glass-panel-static" style={{ padding: "32px" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "24px",
+              flexWrap: "wrap",
+              gap: "16px",
+            }}
+          >
+            <div>
+              <h3
+                style={{
+                  fontSize: "1.4rem",
+                  fontWeight: 800,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                }}
+              >
+                <Trophy className="gradient-text-teal" size={24} />
+                Tabla de Posiciones por Campeonato
+              </h3>
+              <p
+                style={{
+                  color: "var(--text-secondary)",
+                  fontSize: "0.85rem",
+                  marginTop: "4px",
+                }}
+              >
+                Selecciona un campeonato para ver la clasificación y eliminarlo si es necesario.
+              </p>
+            </div>
+
+            <div className="flex-row" style={{ gap: "12px" }}>
+              <label
+                style={{
+                  fontSize: "0.88rem",
+                  fontWeight: 600,
+                  color: "var(--text-secondary)",
+                }}
+              >
+                Campeonato:
+              </label>
+              <select
+                value={rankingChampionshipId}
+                onChange={(e) => setRankingChampionshipId(e.target.value)}
+                className="form-input"
+                style={{ width: "220px", padding: "8px 12px" }}
+              >
+                <option value="">Seleccione...</option>
+                {championships.map((c) => (
+                  <option key={c._id} value={c._id}>
+                    {c.name} {c.isActive ? "(Activo)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {rankingLoading ? (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                padding: "60px",
+              }}
+            >
+              <span className="spinner"></span>
+            </div>
+          ) : !rankingChampionshipId ? (
+            <p
+              style={{
+                color: "var(--text-secondary)",
+                textAlign: "center",
+                padding: "40px",
+              }}
+            >
+              Selecciona un campeonato para ver su tabla de posiciones.
+            </p>
+          ) : rankings.length === 0 ? (
+            <p
+              style={{
+                color: "var(--text-secondary)",
+                textAlign: "center",
+                padding: "40px",
+              }}
+            >
+              No hay jugadores registrados o aún no hay puntajes calculados para este campeonato.
+            </p>
+          ) : (
+            <>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "20px",
+                  gap: "12px",
+                  flexWrap: "wrap",
+                }}
+              >
+                <div>
+                  <span
+                    style={{ fontSize: "0.9rem", color: "var(--text-secondary)" }}
+                  >
+                    Campeonato seleccionado:
+                  </span>
+                  <span style={{ fontWeight: 700, marginLeft: "6px" }}>
+                    {rankingSummary?.name}
+                  </span>
+                </div>
+                <button
+                  onClick={() => handleDeleteChampionship(rankingChampionshipId)}
+                  className="btn-danger"
+                  style={{ padding: "10px 16px", fontSize: "0.85rem" }}
+                >
+                  Eliminar Campeonato
+                </button>
+              </div>
+
+              <div style={{ overflowX: "auto" }}>
+                <table className="leaderboard-table" style={{ marginTop: "0" }}>
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th style={{ paddingLeft: "8px" }}>Usuario</th>
+                      <th>Puntos</th>
+                      <th>Confirmado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rankings.map((row) => (
+                      <tr key={row.userId}>
+                        <td style={{ fontWeight: 700 }}>{row.rank}</td>
+                        <td style={{ fontWeight: 600, paddingLeft: "8px" }}>
+                          @{row.username}
+                        </td>
+                        <td>{row.points}</td>
+                        <td>{row.isConfirmed ? "Sí" : "No"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       )}

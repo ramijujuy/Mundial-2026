@@ -93,9 +93,12 @@ let connectPromise = null;
 if (mongoose.connection.readyState === 0) {
   const MONGO_URI =
     process.env.MONGO_URI || "mongodb://localhost:27017/prode_mundial";
-  
+
   // Log connection attempt (mask credentials)
-  const maskedUri = MONGO_URI.replace(/mongodb\+srv:\/\/.*@/, "mongodb+srv://***:***@");
+  const maskedUri = MONGO_URI.replace(
+    /mongodb\+srv:\/\/.*@/,
+    "mongodb+srv://***:***@",
+  );
   console.log(`[DB] Intentando conectar a MongoDB...`);
   console.log(`[DB] URI (masked): ${maskedUri}`);
   console.log(`[DB] MONGO_URI defined: ${!!process.env.MONGO_URI}`);

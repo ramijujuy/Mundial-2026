@@ -6,10 +6,8 @@ const { authenticateJWT } = require("../middleware");
 // GET /api/fixtures/championships - Helper route to fetch list of all championships (for selector dropdowns)
 router.get("/championships/list", async (req, res) => {
   try {
-    // Only return championships that are still open for registration
-    const championships = await Championship.find({
-      isClosedForRegistration: false,
-    }).sort({ createdAt: -1 });
+    // Return all championships (both open and closed)
+    const championships = await Championship.find().sort({ createdAt: -1 });
     res.json(championships);
   } catch (error) {
     console.error("Error fetching championships:", error);
